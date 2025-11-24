@@ -1,0 +1,194 @@
+# # chunking_clean.py
+# import pandas as pd
+# import json
+# from langchain.text_splitter import CharacterTextSplitter
+
+# # --------------------------
+# # 1. Load your cleaned CSV
+# # --------------------------
+# df = pd.read_csv("Data/drugbank_reduced.csv")
+
+# # --------------------------
+# # 2. Helper: convert lists / NaNs to text
+# # --------------------------
+# def make_text(val):
+#     if pd.isna(val):
+#         return ""
+#     elif isinstance(val, list):
+#         return ", ".join([str(v) for v in val])
+#     elif isinstance(val, str):
+#         return val
+#     else:
+#         return str(val)
+
+# # --------------------------
+# # 3. Create a single 'document' column
+# # --------------------------
+# # Drop 'drugbank-id' and 'name' from chunk content
+# columns_to_include = [col for col in df.columns if col not in ['drugbank-id', 'name']]
+
+# df['document'] = df[columns_to_include].apply(lambda row: ' | '.join([f"{col}: {make_text(row[col])}" 
+#                                                                      for col in columns_to_include]), axis=1)
+
+# # --------------------------
+# # 4. Optional: add word count to check sizes
+# # --------------------------
+# df['word_count'] = df['document'].str.split().apply(len)
+# print(df['word_count'].describe())
+
+# # --------------------------
+# # 5. Chunking with LangChain
+# # --------------------------
+# splitter = CharacterTextSplitter(
+#     separator="\n",
+#     chunk_size=1000,      # you can adjust chunk size
+#     chunk_overlap=0
+# )
+
+# all_chunks = []
+
+# for idx, row in df.iterrows():
+#     chunks = splitter.split_text(row['document'])
+#     for i, chunk in enumerate(chunks):
+#         all_chunks.append({
+#             "name": row.get("name", ""),
+#             "chunk_id": i + 1,
+#             "chunk_text": chunk
+#         })
+
+# # --------------------------
+# # 6. Save chunks to JSON
+# # --------------------------
+# with open("chunks/drug_chunks.json", "w", encoding="utf-8") as f:
+#     json.dump(all_chunks, f, indent=4, ensure_ascii=False)
+
+# print(f"Saved {len(all_chunks)} chunks to drug_chunks.json")
+
+
+
+import pandas as pd
+import json
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+# --------------------------
+# CONFIGURATION
+# --------------------------
+MAX_INTERACTIONS = 10  # Hard limit on how many drugs to list
+
+# --------------------------
+# 1. Load Data
+# --------------------------
+print("Loading data...")
+df = pd.read_csv("Data/drugbank_reduced.csv")
+
+# --------------------------
+# 2. Build Dictionary
+# --------------------------
+id_to_name = dict(zip(df['drugbank-id'], df['name']))
+
+def clean_value(val):
+    """Removes newlines and extra spaces."""
+    if pd.isna(val) or val == "Not available":
+        return ""
+    return str(val).replace('\n', ' ').replace('\r', '').strip()
+
+def resolve_and_limit_ids(val):
+    """
+    1. Resolves IDs to Names.
+    2. KEEPS ONLY THE FIRST 10.
+    3. Adds '...and N more' if the list was cut.
+    """
+    if pd.isna(val) or str(val).strip() == "" or val == "Not available":
+        return ""
+    
+    # Normalize separators
+    val = str(val).replace(',', ' ')
+    items = val.split()
+    
+    resolved_names = []
+    for item in items:
+        # Check if it's an ID
+        if item.startswith("DB") and item[2].isdigit():
+            name = id_to_name.get(item)
+            if name:
+                resolved_names.append(name)
+        else:
+            # Already a name (unlikely in this col, but safety check)
+            resolved_names.append(item)
+    
+    # --- THE LOGIC YOU REQUESTED ---
+    total_count = len(resolved_names)
+    
+    if total_count == 0:
+        return "None"
+    
+    if total_count > MAX_INTERACTIONS:
+        # Keep top 10
+        selected = resolved_names[:MAX_INTERACTIONS]
+        remaining = total_count - MAX_INTERACTIONS
+        return ", ".join(selected) + f" (...and {remaining} more)"
+    else:
+        return ", ".join(resolved_names)
+
+# --------------------------
+# 3. Apply Cleaning & Limiting
+# --------------------------
+print(f"Resolving IDs and limiting lists to {MAX_INTERACTIONS} items...")
+
+# Fix Interactions and Targets
+cols_to_fix = ['targets', 'drug-interactions']
+for col in cols_to_fix:
+    if col in df.columns:
+        df[col] = df[col].apply(resolve_and_limit_ids)
+
+# Clean standard text columns
+exclude_cols = ['drugbank-id', 'name', 'document', 'rag_text']
+cols_to_clean = [c for c in df.columns if c not in exclude_cols]
+
+for col in cols_to_clean:
+    df[col] = df[col].apply(clean_value)
+
+# --------------------------
+# 4. Create Single Dense Text Block
+# --------------------------
+# Since the lists are now short (max 10 items), this whole text 
+# will likely fit into ONE chunk per drug.
+df['rag_text'] = df[cols_to_clean].apply(
+    lambda row: '. '.join([f"{col.upper()}: {row[col]}" for col in cols_to_clean if row[col]]), axis=1
+)
+
+# --------------------------
+# 5. Chunking
+# --------------------------
+splitter = RecursiveCharacterTextSplitter(
+    chunk_size=1000,
+    chunk_overlap=50,
+    separators=[". ", " | ", ", ", " ", ""]
+)
+
+all_chunks = []
+
+print("Chunking...")
+for idx, row in df.iterrows():
+    raw_text = row['rag_text']
+    
+    # Remove double spaces generated by cleaning
+    raw_text = " ".join(raw_text.split())
+    
+    chunks = splitter.split_text(raw_text)
+    
+    for i, chunk in enumerate(chunks):
+        all_chunks.append({
+            "name": row['name'],
+            "chunk_id": i + 1,
+            "chunk_text": chunk
+        })
+
+# --------------------------
+# 6. Save
+# --------------------------
+output_path = "chunks/drug_chunks_final.json"
+with open(output_path, "w", encoding="utf-8") as f:
+    json.dump(all_chunks, f, indent=4, ensure_ascii=False)
+
+print(f"Done. Saved {len(all_chunks)} optimized chunks to {output_path}")
