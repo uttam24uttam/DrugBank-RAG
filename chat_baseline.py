@@ -1,96 +1,3 @@
-# import os
-# import time
-# from langchain_chroma import Chroma
-# from langchain_huggingface import HuggingFaceEmbeddings
-# from langchain_ollama import ChatOllama
-# from langchain_core.prompts import ChatPromptTemplate
-# from langchain_core.runnables import RunnablePassthrough
-
-# # ==========================================
-# # CONFIGURATION
-# # ==========================================
-# DB_FOLDER = "chroma_db_data"
-# # We use Qwen 2.5 (1.5B) because it is significantly smarter than the old 1.8B
-# MODEL_NAME = "qwen2.5:1.5b"  
-
-# # 1. CHECK DATABASE
-# if not os.path.exists(DB_FOLDER):
-#     print(f"ERROR: Database folder '{DB_FOLDER}' not found.")
-#     print("Please run 'create_vector_db.py' first!")
-#     exit()
-
-# # 2. LOAD RESOURCES
-# print("Loading Brain (Embeddings)...")
-# # Must match the embedding model used during ingestion!
-# embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-
-# print("Connecting to Vector Database...")
-# db = Chroma(persist_directory=DB_FOLDER, embedding_function=embedding_model)
-
-# print(f"Connecting to Local Model ({MODEL_NAME})...")
-# # This connects to the 'ollama serve' process running in your background
-# llm = ChatOllama(model=MODEL_NAME, temperature=0)
-
-# # 3. RETRIEVER SETUP
-# # k=3 means "Find the top 3 most relevant chunks"
-# retriever = db.as_retriever(search_kwargs={"k": 3})
-
-# # 4. RAG PROMPT
-# # This instructs Qwen to ONLY use the context provided
-# template = """
-# You are a precise medical assistant. 
-# Answer the user's question using ONLY the context provided below. 
-# If the answer is not in the context, simply say "I don't know based on the available data."
-
-# CONTEXT:
-# {context}
-
-# QUESTION: 
-# {question}
-# """
-
-# prompt = ChatPromptTemplate.from_template(template)
-
-# # 5. BUILD PIPELINE
-# def format_docs(docs):
-#     return "\n\n".join([d.page_content for d in docs])
-
-# rag_chain = (
-#     {"context": retriever | format_docs, "question": RunnablePassthrough()}
-#     | prompt
-#     | llm
-# )
-
-# # ==========================================
-# # CHAT LOOP
-# # ==========================================
-
-# print(f"  DRUG RAG SYSTEM ({MODEL_NAME})")
-
-# print("Type 'q' to exit.\n")
-
-# while True:
-#     query = input("You: ")
-#     if query.lower() in ['q', 'quit', 'exit']:
-#         break
-    
-#     print("Thinking...", end="", flush=True)
-#     start_time = time.time()
-    
-#     try:
-#         # This single line runs the whole Search -> Augment -> Generate flow
-#         response = rag_chain.invoke(query)
-        
-#         print(f"\rAI: {response.content}")
-#         print(f"\n(Response generated in {time.time() - start_time:.2f}s)")
-        
-#     except Exception as e:
-#         print(f"\nError: {e}")
-#         print("Check if Ollama is running via 'ollama serve'!")
-
-
-
-
 import os
 import time
 from langchain_chroma import Chroma
@@ -116,9 +23,7 @@ embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-Mi
 db = Chroma(persist_directory=DB_FOLDER, embedding_function=embedding_model)
 llm = ChatOllama(model=MODEL_NAME, temperature=0) # Temp=0 reduces hallucinations
 
-# ==========================================
-# STEP A: ENTITY EXTRACTOR (Solves Problem 1)
-# ==========================================
+
 # We ask the LLM to extract the EXACT drug name first so we can filter.
 extractor_template = """
 Extract the drug name from the user's question. 
@@ -129,9 +34,7 @@ User Question: {question}
 """
 extractor_chain = ChatPromptTemplate.from_template(extractor_template) | llm | StrOutputParser()
 
-# ==========================================
-# STEP B: SYNTHESIS PROMPT (Solves Problem 2 & 3)
-# ==========================================
+
 # We command it to merge chunks and ban medical advice.
 rag_template = """
 You are a Scientific Database Assistant. Your job is to summarize chemical facts.
@@ -151,10 +54,8 @@ QUESTION:
 """
 rag_prompt = ChatPromptTemplate.from_template(rag_template)
 
-# ==========================================
-# CHAT LOOP
-# ==========================================
 
+# CHAT LOOP
 print(f" PRECISION DRUG BOT ({MODEL_NAME})")
 
 
@@ -171,19 +72,11 @@ while True:
     # Clean up the extracted name (remove extra quotes if model adds them)
     drug_name = drug_name.replace('"', '').replace("'", "")
     
-    # --- 2. RETRIEVE WITH FILTER ---
-    # This is the MAGIC LINE. We force Chroma to only look at this drug.
-    # Note: This requires the drug name in metadata to match exactly. 
-    # If the extraction is slightly off ("Metformin" vs "Metformin"), search might fail.
-    # For a robust system, we would use fuzzy matching here, but this is a good baseline.
-    
+    # --- 2. RETRIEVE WITH FILTER --
+
     search_kwargs = {"k": 3}
     if drug_name != "NONE":
-        # We use the 'contains' logic or exact match depending on your data quality
-        # Here we assume the extracted name is close enough to use as a filter
-        # If your metadata 'drug_name' is "Metformin HCl", searching "Metformin" might fail with strict $eq
-        # So we try standard search first, but if you want strictness:
-        # search_kwargs["filter"] = {"drug_name": drug_name} 
+
         pass 
     
     # For now, let's stick to Vector Search but print what we *would* filter
@@ -214,4 +107,5 @@ while True:
     response = final_chain.invoke({"context": context_text, "question": query})
     
     print(f"\rAI: {response}")
+
     print(f"\n[Debug: Focused on '{drug_name}' | Used {len(filtered_docs)} chunks]")
