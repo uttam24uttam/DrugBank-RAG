@@ -1,71 +1,3 @@
-# # chunking_clean.py
-# import pandas as pd
-# import json
-# from langchain.text_splitter import CharacterTextSplitter
-
-# # --------------------------
-# # 1. Load your cleaned CSV
-# # --------------------------
-# df = pd.read_csv("Data/drugbank_reduced.csv")
-
-# # --------------------------
-# # 2. Helper: convert lists / NaNs to text
-# # --------------------------
-# def make_text(val):
-#     if pd.isna(val):
-#         return ""
-#     elif isinstance(val, list):
-#         return ", ".join([str(v) for v in val])
-#     elif isinstance(val, str):
-#         return val
-#     else:
-#         return str(val)
-
-# # --------------------------
-# # 3. Create a single 'document' column
-# # --------------------------
-# # Drop 'drugbank-id' and 'name' from chunk content
-# columns_to_include = [col for col in df.columns if col not in ['drugbank-id', 'name']]
-
-# df['document'] = df[columns_to_include].apply(lambda row: ' | '.join([f"{col}: {make_text(row[col])}" 
-#                                                                      for col in columns_to_include]), axis=1)
-
-# # --------------------------
-# # 4. Optional: add word count to check sizes
-# # --------------------------
-# df['word_count'] = df['document'].str.split().apply(len)
-# print(df['word_count'].describe())
-
-# # --------------------------
-# # 5. Chunking with LangChain
-# # --------------------------
-# splitter = CharacterTextSplitter(
-#     separator="\n",
-#     chunk_size=1000,      # you can adjust chunk size
-#     chunk_overlap=0
-# )
-
-# all_chunks = []
-
-# for idx, row in df.iterrows():
-#     chunks = splitter.split_text(row['document'])
-#     for i, chunk in enumerate(chunks):
-#         all_chunks.append({
-#             "name": row.get("name", ""),
-#             "chunk_id": i + 1,
-#             "chunk_text": chunk
-#         })
-
-# # --------------------------
-# # 6. Save chunks to JSON
-# # --------------------------
-# with open("chunks/drug_chunks.json", "w", encoding="utf-8") as f:
-#     json.dump(all_chunks, f, indent=4, ensure_ascii=False)
-
-# print(f"Saved {len(all_chunks)} chunks to drug_chunks.json")
-
-
-
 import pandas as pd
 import json
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -190,5 +122,6 @@ for idx, row in df.iterrows():
 output_path = "chunks/drug_chunks_final.json"
 with open(output_path, "w", encoding="utf-8") as f:
     json.dump(all_chunks, f, indent=4, ensure_ascii=False)
+
 
 print(f"Done. Saved {len(all_chunks)} optimized chunks to {output_path}")
