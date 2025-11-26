@@ -17,7 +17,7 @@ from config import (
     LABEL_MAPPING,
 )
 
-# LOAD MASTER PROMPT
+# Loading Master Prompt
 if not os.path.exists(MASTER_PROMPT_PATH):
     raise FileNotFoundError(f"Master prompt missing: {MASTER_PROMPT_PATH}")
 
@@ -25,7 +25,7 @@ with open(MASTER_PROMPT_PATH, "r") as f:
     MASTER_PROMPT = f.read().strip()
 
 
-# MODEL LOADER 
+# Loading All the Models
 def load_chat_model(model_name: str, quantize_4bit=False):
     print(f"[HF Loader] Loading ChatML model: {model_name}")
 
@@ -48,7 +48,7 @@ def load_chat_model(model_name: str, quantize_4bit=False):
 
 # LOAD MODELS
 print(f"\n[MAIN MODEL] {LLM_MODEL_NAME}")
-#For using baseline model
+
 main_model, main_tokenizer = load_chat_model(EXTRACTOR_MODEL_NAME)
 
 extractor_name = EXTRACTOR_MODEL_NAME if EXTRACTOR_USE_FINE_TUNED else LLM_MODEL_NAME
@@ -190,24 +190,14 @@ def generate_answer(query: str):
 
     
     # Returning without hitting RAG if question is not of TypeA
-    if question_type == "TYPE_B": 
+    if question_type != "TYPE_A": 
       
          return {
-            "answer": "Sorry, I cannot answer this question. Try asking a different question [BERT] : TYPE_B .",
+            "answer": "Sorry, I cannot answer this question. Try asking a different question [BERT] .",
             "drug_extracted": "N/A - Classification early exit",
             "chunks_used": [],
             "num_chunks": 0
         }
-
-    elif question_type == "TYPE_C": 
-      
-         return {
-            "answer": "Sorry, I cannot answer this question. Try asking a different question [BERT] : TYPE_C .",
-            "drug_extracted": "N/A - Classification early exit",
-            "chunks_used": [],
-            "num_chunks": 0
-        }
-        
   
 
     drug = extract_drug_name(query)
@@ -283,3 +273,4 @@ if __name__ == "__main__":
         out = generate_answer(q)
         print("AI:", out["answer"])
         print("Drug:", out["drug_extracted"])
+
