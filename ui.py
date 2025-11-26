@@ -38,7 +38,7 @@ def ask_backend(question):
 
 def get_gradio_app():
     with gr.Blocks() as demo:
-        gr.Markdown("## 🧪 Open-Book Pharmacology Agent (Gradio UI)")
+        gr.Markdown("## Open-Book Pharmacology Agent (Gradio UI)")
         question = gr.Textbox(label="Ask your question")
         btn = gr.Button("Submit")
         
