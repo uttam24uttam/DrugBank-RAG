@@ -9,12 +9,12 @@ from langchain_core.documents import Document
 INPUT_FILE = "chunks/drug_chunks_final.json" 
 DB_FOLDER = "chroma_db_data"
 
-# 1. CLEAN SLATE 
+
 if os.path.exists(DB_FOLDER):
     print(f"Deleting old database folder: {DB_FOLDER}")
     shutil.rmtree(DB_FOLDER)
 
-# 2. LOAD CHUNKS
+# Loading Chunks
 print(f"Loading chunks from {INPUT_FILE}...")
 try:
     with open(INPUT_FILE, "r", encoding="utf-8") as f:
@@ -24,7 +24,7 @@ except FileNotFoundError:
     print("Check your folder name or file name.")
     exit()
 
-# 3. CONVERT TO DOCUMENTS
+# Creating Documents
 print("Converting chunks to LangChain Documents...")
 documents = []
 
@@ -32,7 +32,7 @@ for chunk in raw_chunks:
     doc = Document(
         page_content=chunk["chunk_text"],
         metadata={
-            "drug_name": chunk.get("drug_name", chunk.get("name", "Unknown")), # Handles both key names
+            "drug_name": chunk.get("drug_name", chunk.get("name", "Unknown")), 
             "type": chunk.get("type", "general"),
             "section": chunk.get("section", "general")
         }
@@ -41,7 +41,7 @@ for chunk in raw_chunks:
 
 print(f"Ready to embed {len(documents)} chunks.")
 
-# 4. BUILD DATABASE 
+# Building Database 
 print("Loading Model (all-MiniLM-L6-v2)...")
 embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
@@ -54,4 +54,5 @@ db = Chroma.from_documents(
 
 print("-" * 30)
 print(f"SUCCESS! Database created at './{DB_FOLDER}'")
+
 print("-" * 30)
